@@ -176,6 +176,52 @@ class FormatConvertTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("| n | w |", out.read_text(encoding="utf-8"))
 
+    # German Excel "CSV (Trennzeichen-getrennt)": ';' as separator, ',' as decimal mark, often Windows-1252.
+    def test_csv_excel_de_semicolon_utf8(self):
+        src = self.d / "de.csv"
+        src.write_bytes("﻿Name;Betrag;Ort\nMüller;12,50;Köln\n".encode("utf-8"))
+        out = self.d / "de.md"
+        p = run(str(src), "-o", str(out))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        md = out.read_text(encoding="utf-8")
+        self.assertIn("| Name | Betrag | Ort |", md)
+        self.assertIn("| Müller | 12,50 | Köln |", md)
+
+    def test_csv_excel_de_cp1252(self):
+        src = self.d / "ansi.csv"
+        src.write_bytes("Name;Ort\r\nSchäfer;Gießen\r\n".encode("cp1252"))
+        out = self.d / "ansi.md"
+        p = run(str(src), "-o", str(out))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("| Schäfer | Gießen |", out.read_text(encoding="utf-8"))
+
+    def test_csv_utf16_refused_cleanly(self):
+        src = self.d / "u16.csv"
+        src.write_bytes("Name;Ort\r\nA;B\r\n".encode("utf-16"))
+        p = run(str(src), "-o", str(self.d / "u16.md"))
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("FEHLER", p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertFalse((self.d / "u16.md").exists())
+
+    def test_csv_comma_with_quoted_semicolon_stays_comma(self):
+        src = self.d / "q.csv"
+        src.write_text('"Name; Vorname","Notiz; kurz; lang",Ort\n"Do; Trung","x; y",Berlin\n', encoding="utf-8")
+        out = self.d / "q.md"
+        p = run(str(src), "-o", str(out))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        md = out.read_text(encoding="utf-8")
+        self.assertIn("| Name; Vorname | Notiz; kurz; lang | Ort |", md)
+        self.assertIn("| Do; Trung | x; y | Berlin |", md)
+
+    def test_csv_single_column_keeps_semicolons_in_data(self):
+        src = self.d / "one.csv"
+        src.write_text("Notiz\nerst a; dann b\n", encoding="utf-8")
+        out = self.d / "one.md"
+        p = run(str(src), "-o", str(out))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("| erst a; dann b |", out.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

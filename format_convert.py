@@ -20,6 +20,7 @@ Keine Netzwerkzugriffe, keine Secrets, atomares Schreiben.
 """
 import argparse
 import csv
+import io
 import json
 import sys
 from html.parser import HTMLParser
@@ -95,10 +96,35 @@ def read_text_input(path, suffix):
     fail(f"kein Text-Import fuer {suffix}")
 
 
+def read_csv_text(path):
+    """UTF-8 (with/without BOM), else Windows-1252 (German Excel 'CSV (Trennzeichen-getrennt)').
+    NUL bytes mean UTF-16 ('Unicode-Text') or binary: refused instead of guessed."""
+    raw = path.read_bytes()
+    if b"\x00" in raw:
+        fail(f"{path.name}: keine UTF-8/ANSI-CSV (UTF-16 oder binaer?) - in Excel als 'CSV UTF-8' speichern")
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    fail(f"{path.name}: Zeichenkodierung weder UTF-8 noch Windows-1252")
+
+
+def csv_delimiter(text):
+    """Separator of the header line: the most frequent of , ; TAB outside double quotes (tie -> ',')."""
+    counts, quoted = {",": 0, ";": 0, "\t": 0}, False
+    for ch in text.split("\n", 1)[0]:
+        if ch == '"':
+            quoted = not quoted
+        elif not quoted and ch in counts:
+            counts[ch] += 1
+    return max(counts, key=lambda c: (counts[c], c == ","))
+
+
 def read_table(path, suffix, sheet=None):
     if suffix == ".csv":
-        with path.open(encoding="utf-8-sig", newline="") as f:
-            rows = list(csv.reader(f))
+        text = read_csv_text(path)
+        rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=csv_delimiter(text)))
         return rows[0] if rows else [], rows[1:]
     if suffix == ".json":
         data = json.loads(path.read_text(encoding="utf-8"))
