@@ -5,6 +5,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+import format_convert
 
 ROOT = Path(__file__).resolve().parent
 CONV = ROOT / "format_convert.py"
@@ -97,6 +100,22 @@ class FormatConvertTests(unittest.TestCase):
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
         p = run(str(src), "-o", str(out))
         self.assertNotEqual(p.returncode, 0)
+
+    def test_target_created_during_conversion_is_preserved(self):
+        out = self.d / "result.txt"
+
+        def write_conversion(_inputs, temporary_output, _sheet):
+            temporary_output.write_bytes(b"converted")
+            out.write_bytes(b"concurrent")
+
+        with (
+            patch.object(format_convert, "_write_conversion", write_conversion),
+            self.assertRaises(SystemExit) as error,
+        ):
+            format_convert.convert([], out)
+        self.assertEqual(error.exception.code, 2)
+        self.assertEqual(out.read_bytes(), b"concurrent")
+        self.assertEqual(list(self.d.iterdir()), [out])
 
     def test_unsupported_refused(self):
         src = self.d / "g.mp4"

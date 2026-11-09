@@ -22,7 +22,9 @@ import argparse
 import csv
 import io
 import json
+import os
 import sys
+import tempfile
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -249,6 +251,22 @@ def convert(inputs, output, overwrite=False, sheet=None):
     out = Path(output)
     if out.exists() and not overwrite:
         fail(f"Ziel existiert (ohne --overwrite kein Ueberschreiben): {out}")
+    with tempfile.TemporaryDirectory(dir=out.parent) as directory:
+        tmp = Path(directory) / out.name
+        _write_conversion(inputs, tmp, sheet)
+        try:
+            if overwrite:
+                tmp.replace(out)
+            elif os.name == "nt":
+                tmp.rename(out)
+            else:
+                out.hardlink_to(tmp)
+        except FileExistsError:
+            fail(f"Ziel existiert (ohne --overwrite kein Ueberschreiben): {out}")
+    return str(out)
+
+
+def _write_conversion(inputs, tmp, sheet):
     srcs = [Path(p) for p in inputs]
     for s in srcs:
         if not s.is_file():
@@ -258,24 +276,21 @@ def convert(inputs, output, overwrite=False, sheet=None):
         if s.suffix.lower() not in MATRIX:
             fail(f"Quelltyp nicht unterstuetzt: {s.suffix} (--list zeigt die Matrix)")
     in_suf = [s.suffix.lower() for s in srcs]
-    out_suf = out.suffix.lower()
+    out_suf = tmp.suffix.lower()
     if out_suf == ".pdf" and all(s == ".pdf" for s in in_suf):
         pypdf = need("pypdf")
         writer = pypdf.PdfWriter()
         for s in srcs:
             for page in pypdf.PdfReader(str(s)).pages:
                 writer.add_page(page)
-        tmp = out.with_suffix(".tmp")
         with tmp.open("wb") as f:
             writer.write(f)
-        tmp.replace(out)
-        return str(out)
+        return
     if len(srcs) > 1:
         fail("Mehrere Eingaben nur als PDF-Merge (.pdf -> .pdf)")
     src, suf = srcs[0], in_suf[0]
     if out_suf not in MATRIX[suf]:
         fail(f"{suf} -> {out_suf} nicht unterstuetzt (--list zeigt die Matrix)")
-    tmp = out.with_suffix(".tmp")
     if out_suf == ".pdf":
         if suf in (".png", ".jpg", ".jpeg"):
             write_pdf_images(tmp, src.stem, [src])
@@ -302,8 +317,6 @@ def convert(inputs, output, overwrite=False, sheet=None):
             tmp.write_text(table_to_markdown([str(h) for h in header], rows), encoding="utf-8")
         else:
             tmp.write_text(read_text_input(src, suf), encoding="utf-8")
-    tmp.replace(out)
-    return str(out)
 
 
 def main(argv=None):
