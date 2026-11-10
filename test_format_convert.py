@@ -1,4 +1,5 @@
 """Tests fuer dashboard/format_convert.py (offline, temporaere Dateien)."""
+import csv
 import json
 import subprocess
 import sys
@@ -15,7 +16,7 @@ CONV = ROOT / "format_convert.py"
 
 def run(*args):
     p = subprocess.run([sys.executable, str(CONV), *args], text=True,
-                       encoding="utf-8", capture_output=True, timeout=60)
+                       encoding="utf-8", capture_output=True, timeout=60, check=False)
     return p
 
 
@@ -54,11 +55,16 @@ class FormatConvertTests(unittest.TestCase):
 
     def test_csv_xlsx_roundtrip_and_md(self):
         src = self.d / "c.csv"
-        src.write_text("name,wert\na,1\nb,2\n", encoding="utf-8")
+        src.write_text('name,wert\na,1\n"b, inc.",2\n"c\nmehrzeilig",\n', encoding="utf-8")
         xlsx = self.d / "c.xlsx"
         self.assertEqual(run(str(src), "-o", str(xlsx)).returncode, 0)
         back = self.d / "c2.csv"
         self.assertEqual(run(str(xlsx), "-o", str(back)).returncode, 0)
+        with (
+            src.open(encoding="utf-8", newline="") as original,
+            back.open(encoding="utf-8", newline="") as converted,
+        ):
+            self.assertEqual(list(csv.reader(converted)), list(csv.reader(original)))
         md = self.d / "c.md"
         self.assertEqual(run(str(src), "-o", str(md)).returncode, 0)
         self.assertIn("| name | wert |", md.read_text(encoding="utf-8"))
@@ -198,7 +204,7 @@ class FormatConvertTests(unittest.TestCase):
     # German Excel "CSV (Trennzeichen-getrennt)": ';' as separator, ',' as decimal mark, often Windows-1252.
     def test_csv_excel_de_semicolon_utf8(self):
         src = self.d / "de.csv"
-        src.write_bytes("﻿Name;Betrag;Ort\nMüller;12,50;Köln\n".encode("utf-8"))
+        src.write_bytes("﻿Name;Betrag;Ort\nMüller;12,50;Köln\n".encode())
         out = self.d / "de.md"
         p = run(str(src), "-o", str(out))
         self.assertEqual(p.returncode, 0, p.stderr)

@@ -141,8 +141,14 @@ def read_table(path, suffix, sheet=None):
     if suffix == ".xlsx":
         oxl = need("openpyxl")
         wb = oxl.load_workbook(str(path), read_only=True, data_only=True)
-        ws = wb[sheet] if sheet else wb.active
-        rows = [[c.value if c.value is not None else "" for c in row] for row in ws.rows]
+        try:
+            ws = wb[sheet] if sheet else wb.active
+            rows = [
+                [value if value is not None else "" for value in row]
+                for row in ws.iter_rows(values_only=True)
+            ]
+        finally:
+            wb.close()
         return (rows[0] if rows else []), rows[1:]
     fail(f"kein Tabellen-Import fuer {suffix}")
 
@@ -160,7 +166,7 @@ def write_pdf_text(target, title, text):
     from reportlab.pdfgen import canvas
     c = canvas.Canvas(str(target), pagesize=A4)
     c.setTitle(title[:100])
-    width, height = A4
+    _, height = A4
     y = height - 20 * rl.lib.units.mm
     c.setFont("Helvetica", 10)
     for raw in text.splitlines() or [""]:
@@ -216,7 +222,7 @@ def write_pdf_table(target, title, header, rows):
 
 def write_pdf_images(target, title, images):
     need("PIL")
-    rl = need("reportlab")
+    need("reportlab")
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
@@ -311,6 +317,13 @@ def _write_conversion(inputs, tmp, sheet):
         wb.save(str(tmp))
     elif out_suf == ".docx":
         write_docx(tmp, read_text_input(src, suf))
+    elif out_suf == ".csv":
+        header, rows = read_table(src, suf, sheet)
+        with tmp.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.writer(stream)
+            if header:
+                writer.writerow(header)
+            writer.writerows(rows)
     else:
         if suf in (".csv", ".json", ".xlsx"):
             header, rows = read_table(src, suf, sheet)
