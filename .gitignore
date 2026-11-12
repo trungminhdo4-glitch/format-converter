@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 *.tmp
+.safegit/audit.jsonl
+.safegit/receipts/
+.opencode/node_modules/

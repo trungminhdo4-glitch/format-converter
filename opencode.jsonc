@@ -1,0 +1,132 @@
+// agent-workspace project template for OpenCode V2 (verified against 2.0.27).
+// Copied into a project as opencode.jsonc by `node aw.mjs init-project <dir>`.
+// Permissions: ordered rules, LAST match wins, so the broad deny comes first.
+// No --auto: `opencode run` rejects every remaining "ask", i.e. anything not allowed here is denied.
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "implementer",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 }
+  },
+  // OpenRouter gateway (V2 native package, verified against opencode 2.0.27 docs).
+  // OWNER ACTION: set OPENROUTER_API_KEY in the server environment or run /connect —
+  // never write a key into this file (no secrets in config). Without the key the
+  // provider stays inactive and these models are not selectable.
+  // Only :free models are listed here — paid models are an owner gate ("paid models or any cost").
+  // Model IDs verified against GET https://openrouter.ai/api/v1/models (2026-11-12: 468 models, 16 with pricing 0).
+  // Reference as openrouter/<full OpenRouter ID>, e.g. openrouter/google/gemma-4-31b-it:free
+  "providers": {
+    "openrouter": {
+      "name": "OpenRouter",
+      "env": ["OPENROUTER_API_KEY"],
+      "package": "@opencode/ai/providers/openrouter",
+      "models": {
+        "openrouter/free": {
+          "name": "OpenRouter Free Models Router",
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 200000 }
+        },
+        "cohere/north-mini-code:free": {
+          "name": "Cohere: North Mini Code (free)",
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 256000 }
+        },
+        "google/gemma-4-31b-it:free": {
+          "name": "Google: Gemma 4 31B (free)",
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 262144 }
+        },
+        "nvidia/nemotron-3.5-lightning:free": {
+          "name": "NVIDIA: Nemotron 3.5 Lightning (free)",
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 1000000 }
+        },
+        "thinkingmachines/inkling-2-small:free": {
+          "name": "Thinking Machines: Inkling 2 Small (free)",
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 1048576 }
+        }
+      }
+    }
+  },
+  "agents": {
+    "implementer": {
+      "description": "Implements one scoped task inside the current worktree, runs the tests, stages named files only.",
+      "mode": "primary",
+      "steps": 40,
+      "system": "You implement exactly one task in the current directory (a git worktree). Start by restating the task contract in a short block: objective, non-goals, allowed_write_paths, forbidden_actions. Then plan in 3-6 bullet points. List the skills and tools you will use. After each major step, give a one-line status checkpoint. Change only files needed for the task. Run the project's tests and report real output. Stage files by name with `git add -- <path>`; never `git add .` / `-A`. Commit only with `git commit -m`. Never push, reset, clean, rebase or force anything. If SafeGit or a permission denies a call, report the denial verbatim and do not retry it another way. Finish with a report: RESTATED CONTRACT / PLAN / CHANGED FILES / TEST OUTPUT / SAFEGIT DECISIONS / OPEN ISSUES.",
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "*", "effect": "allow" },
+        { "action": "glob", "resource": "*", "effect": "allow" },
+        { "action": "grep", "resource": "*", "effect": "allow" },
+        { "action": "skill", "resource": "*", "effect": "allow" },
+        { "action": "todo", "resource": "*", "effect": "allow" },
+        { "action": "edit", "resource": "*", "effect": "allow" },
+        { "action": "shell", "resource": "node --test*", "effect": "allow" },
+        { "action": "shell", "resource": "npm test*", "effect": "allow" },
+        { "action": "shell", "resource": "git status*", "effect": "allow" },
+        { "action": "shell", "resource": "git diff*", "effect": "allow" },
+        { "action": "shell", "resource": "git log*", "effect": "allow" },
+        { "action": "shell", "resource": "git add -- *", "effect": "allow" },
+        { "action": "shell", "resource": "git commit -m *", "effect": "allow" },
+        { "action": "shell", "resource": "gemini --version*", "effect": "allow" },
+        { "action": "shell", "resource": "qwen --version*", "effect": "allow" },
+        { "action": "shell", "resource": "kilo --version*", "effect": "allow" },
+        { "action": "shell", "resource": "crush --version*", "effect": "allow" },
+        { "action": "shell", "resource": "ollama --version*", "effect": "allow" },
+        { "action": "subagent", "resource": "researcher", "effect": "allow" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+        { "action": "read", "resource": "*.env", "effect": "deny" },
+        { "action": "read", "resource": "*.env.*", "effect": "deny" },
+        { "action": "edit", "resource": "*.env*", "effect": "deny" },
+        { "action": "edit", "resource": "opencode.jsonc", "effect": "deny" },
+        { "action": "edit", "resource": "*.opencode*", "effect": "deny" },
+        { "action": "edit", "resource": "*.safegit*", "effect": "deny" },
+        { "action": "external_directory", "resource": "*", "effect": "deny" }
+      ]
+    },
+    "researcher": {
+      "description": "Read-only: finds existing code, skills and tools relevant to a task; never edits or runs commands.",
+      "mode": "subagent",
+      "steps": 15,
+      "system": "Read-only research. Report which files, functions, skills and tools already exist for the task, with paths. Do not propose new code if something existing fits. Mark anything you did not read as UNVERIFIED.",
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "*", "effect": "allow" },
+        { "action": "glob", "resource": "*", "effect": "allow" },
+        { "action": "grep", "resource": "*", "effect": "allow" },
+        { "action": "skill", "resource": "*", "effect": "allow" },
+        { "action": "read", "resource": "*.env", "effect": "deny" },
+        { "action": "read", "resource": "*.env.*", "effect": "deny" },
+        { "action": "external_directory", "resource": "*", "effect": "deny" }
+      ]
+    },
+    "reviewer": {
+      "description": "Independent check of the current diff: runs tests, reads the diff, reports findings; never edits.",
+      "mode": "subagent",
+      "steps": 15,
+      "system": "Independent review. Run the tests yourself, read `git diff` and `git diff --cached`, and check the change against the task. Report PASS/FAIL with evidence (command + output). Do not edit files.",
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "*", "effect": "allow" },
+        { "action": "glob", "resource": "*", "effect": "allow" },
+        { "action": "grep", "resource": "*", "effect": "allow" },
+        { "action": "shell", "resource": "node --test*", "effect": "allow" },
+        { "action": "shell", "resource": "npm test*", "effect": "allow" },
+        { "action": "shell", "resource": "git diff*", "effect": "allow" },
+        { "action": "shell", "resource": "git status*", "effect": "allow" },
+        { "action": "shell", "resource": "git log*", "effect": "allow" },
+        { "action": "shell", "resource": "gemini --version*", "effect": "allow" },
+        { "action": "shell", "resource": "qwen --version*", "effect": "allow" },
+        { "action": "shell", "resource": "kilo --version*", "effect": "allow" },
+        { "action": "shell", "resource": "crush --version*", "effect": "allow" },
+        { "action": "shell", "resource": "ollama --version*", "effect": "allow" },
+        { "action": "read", "resource": "*.env", "effect": "deny" },
+        { "action": "read", "resource": "*.env.*", "effect": "deny" },
+        { "action": "external_directory", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
