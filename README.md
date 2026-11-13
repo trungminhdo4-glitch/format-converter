@@ -26,6 +26,8 @@ CSV input: UTF-8 (with or without BOM) or Windows-1252, as German Excel saves
 "CSV (Trennzeichen-getrennt)"; the separator (`,` `;` or TAB) is the most frequent one in
 the header line outside quotes (tie: `,`). UTF-16 CSV ("Unicode-Text") is refused with
 exit code 2 — save as "CSV UTF-8". Cell values stay text (`12,50` is not converted).
+In XLSX output, strings from CSV and JSON are stored as literal text, including
+values such as `=1+2` and `#N/A`. JSON numbers remain numeric.
 
 `--list-sheets` prints a JSON array of worksheet names in workbook order.
 Pass a name to `--sheet` to select that worksheet. XLSX-to-CSV export writes

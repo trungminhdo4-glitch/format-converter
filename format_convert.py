@@ -27,6 +27,7 @@ import sys
 import tempfile
 from contextlib import closing, contextmanager
 from html.parser import HTMLParser
+from itertools import chain
 from pathlib import Path
 from typing import NoReturn
 from zipfile import BadZipFile
@@ -332,9 +333,11 @@ def _write_conversion(inputs, tmp, sheet):
         wb = oxl.Workbook()
         ws = wb.active
         ws.title = src.stem[:31]
-        ws.append([str(h) for h in header])
-        for r in rows:
-            ws.append(list(r))
+        for row_number, row in enumerate(chain(([str(h) for h in header],), rows), 1):
+            for column, value in enumerate(row, 1):
+                cell = ws.cell(row=row_number, column=column, value=value)
+                if isinstance(value, str):
+                    cell.data_type = "s"
         wb.save(str(tmp))
     elif out_suf == ".docx":
         write_docx(tmp, read_text_input(src, suf))

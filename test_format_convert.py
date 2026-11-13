@@ -75,6 +75,29 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_xlsx_keeps_imported_strings_literal_and_json_numbers_numeric(self):
+        from openpyxl import load_workbook
+
+        for suffix, content, number in (
+            ("csv", '=1+2,Value\n=3+4,0042\n#N/A,42\n', "0042"),
+            ("json", '[{"=1+2":"=3+4","Value":42},{"=1+2":"#N/A","Value":42}]', 42),
+        ):
+            with self.subTest(suffix=suffix):
+                src = self.d / f"table.{suffix}"
+                src.write_text(content, encoding="utf-8")
+                out = self.d / f"{suffix}.xlsx"
+                result = run(str(src), "-o", str(out))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                book = load_workbook(out, data_only=False)
+                try:
+                    sheet = book["table"]
+                    for position, value in (("A1", "=1+2"), ("A2", "=3+4"), ("A3", "#N/A")):
+                        self.assertEqual(sheet[position].data_type, "s")
+                        self.assertEqual(sheet[position].value, value)
+                    self.assertEqual(sheet["B2"].value, number)
+                finally:
+                    book.close()
+
     def test_image_to_pdf(self):
         from PIL import Image
         img = self.d / "e.png"
