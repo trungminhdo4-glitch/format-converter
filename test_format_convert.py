@@ -201,6 +201,47 @@ class FormatConvertTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("| n | w |", out.read_text(encoding="utf-8"))
 
+    def test_list_sheets_and_export_selected_sheet(self):
+        import openpyxl
+        from openpyxl.chart import BarChart, Reference
+
+        src = self.d / "sheets.xlsx"
+        wb = openpyxl.Workbook()
+        overview = wb.active
+        assert overview is not None
+        overview.title = "Übersicht"
+        detail = wb.create_sheet("Daten 2026")
+        detail.append(["Name", "Notiz"])
+        detail.append(["Ada", "Komma, und\nZeilenumbruch"])
+        detail.append([None, 12.5])
+        chart = BarChart()
+        chart.add_data(Reference(detail, min_col=2, min_row=3, max_row=3))
+        wb.create_chartsheet("Diagramm").add_chart(chart)
+        wb.save(src)
+
+        listing = run(str(src), "--list-sheets")
+        self.assertEqual(listing.returncode, 0, listing.stderr)
+        self.assertEqual(json.loads(listing.stdout), ["Übersicht", "Daten 2026"])
+        out = self.d / "sheets.csv"
+        export = run(str(src), "-o", str(out), "--sheet", "Daten 2026")
+        self.assertEqual(export.returncode, 0, export.stderr)
+        with out.open(encoding="utf-8", newline="") as stream:
+            self.assertEqual(list(csv.reader(stream)), [
+                ["Name", "Notiz"], ["Ada", "Komma, und\nZeilenumbruch"], ["", "12.5"],
+            ])
+
+    def test_missing_sheet_preserves_existing_destination(self):
+        import openpyxl
+        src = self.d / "sheets.xlsx"
+        openpyxl.Workbook().save(src)
+        out = self.d / "sheets.csv"
+        out.write_text("original", encoding="utf-8")
+        result = run(str(src), "-o", str(out), "--overwrite", "--sheet", "Fehlt")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("Fehlt", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertEqual(out.read_text(encoding="utf-8"), "original")
+
     # German Excel "CSV (Trennzeichen-getrennt)": ';' as separator, ',' as decimal mark, often Windows-1252.
     def test_csv_excel_de_semicolon_utf8(self):
         src = self.d / "de.csv"

@@ -6,6 +6,8 @@ school and office work actually needs — nothing more.
 ```bash
 python format_convert.py EINGABE -o AUSGABE [--overwrite] [--sheet BLATT]
 python format_convert.py --list   # supported matrix as JSON
+python format_convert.py Mappe.xlsx --list-sheets
+python format_convert.py Mappe.xlsx -o Daten.csv --sheet "Daten 2026"
 ```
 
 ## Matrix
@@ -24,6 +26,11 @@ CSV input: UTF-8 (with or without BOM) or Windows-1252, as German Excel saves
 the header line outside quotes (tie: `,`). UTF-16 CSV ("Unicode-Text") is refused with
 exit code 2 — save as "CSV UTF-8". Cell values stay text (`12,50` is not converted).
 
+`--list-sheets` prints a JSON array of worksheet names in workbook order.
+Pass a name to `--sheet` to select that worksheet. XLSX-to-CSV export writes
+rows as it reads them, so it can export large worksheets without holding all
+their rows in memory.
+
 Deliberately refused with exit code 2: audio, video, archives,
 executables, and any unknown extension. Existing output files are never
 overwritten without `--overwrite`. Writes are atomic (temp + replace).
@@ -36,7 +43,7 @@ python-docx 1.2.0, Pillow 12.3.0, pypdf 6.20.1. No network access.
 ## Tests
 
 ```bash
-python -m unittest discover -s . -p "test_*.py"   # 20 tests, offline
+python -m unittest discover -s . -p "test_*.py"   # offline
 ```
 
 ## License

@@ -25,8 +25,11 @@ import json
 import os
 import sys
 import tempfile
+from contextlib import closing, contextmanager
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import NoReturn
+from zipfile import BadZipFile
 
 DEPS = {
     "pdf": ("reportlab", "reportlab"),
@@ -55,7 +58,7 @@ REFUSED = {".exe", ".msi", ".bat", ".ps1", ".zip", ".7z", ".rar",
            ".mp3", ".mp4", ".avi", ".mkv", ".wav", ".mov"}
 
 
-def fail(msg):
+def fail(msg: str) -> NoReturn:
     print(f"FEHLER: {msg}", file=sys.stderr)
     raise SystemExit(2)
 
@@ -123,6 +126,29 @@ def csv_delimiter(text):
     return max(counts, key=lambda c: (counts[c], c == ","))
 
 
+def open_workbook(path: Path):
+    oxl = need("openpyxl")
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    try:
+        return closing(oxl.load_workbook(str(path), read_only=True, data_only=True))
+    except (OSError, BadZipFile, InvalidFileException) as exc:
+        fail(f"XLSX kann nicht geöffnet werden: {path} ({exc})")
+
+
+@contextmanager
+def worksheet_rows(path: Path, sheet: str | None):
+    with open_workbook(path) as workbook:
+        worksheet = workbook.active
+        if sheet:
+            if sheet not in [ws.title for ws in workbook.worksheets]:
+                fail(f"Tabellenblatt fehlt: {sheet!r} (--list-sheets zeigt die Namen)")
+            worksheet = workbook[sheet]
+        if worksheet not in workbook.worksheets:
+            fail("Kein aktives Tabellenblatt (--list-sheets zeigt die Namen)")
+        yield worksheet.iter_rows(values_only=True)
+
+
 def read_table(path, suffix, sheet=None):
     if suffix == ".csv":
         text = read_csv_text(path)
@@ -139,16 +165,11 @@ def read_table(path, suffix, sheet=None):
                         keys.append(k)
         return keys, [[r.get(k, "") if isinstance(r, dict) else r for k in keys] for r in items]
     if suffix == ".xlsx":
-        oxl = need("openpyxl")
-        wb = oxl.load_workbook(str(path), read_only=True, data_only=True)
-        try:
-            ws = wb[sheet] if sheet else wb.active
+        with worksheet_rows(path, sheet) as source_rows:
             rows = [
                 [value if value is not None else "" for value in row]
-                for row in ws.iter_rows(values_only=True)
+                for row in source_rows
             ]
-        finally:
-            wb.close()
         return (rows[0] if rows else []), rows[1:]
     fail(f"kein Tabellen-Import fuer {suffix}")
 
@@ -318,12 +339,11 @@ def _write_conversion(inputs, tmp, sheet):
     elif out_suf == ".docx":
         write_docx(tmp, read_text_input(src, suf))
     elif out_suf == ".csv":
-        header, rows = read_table(src, suf, sheet)
-        with tmp.open("w", encoding="utf-8", newline="") as stream:
-            writer = csv.writer(stream)
-            if header:
-                writer.writerow(header)
-            writer.writerows(rows)
+        with (
+            worksheet_rows(src, sheet) as rows,
+            tmp.open("w", encoding="utf-8", newline="") as stream,
+        ):
+            csv.writer(stream).writerows(rows)
     else:
         if suf in (".csv", ".json", ".xlsx"):
             header, rows = read_table(src, suf, sheet)
@@ -338,12 +358,25 @@ def main(argv=None):
     ap.add_argument("-o", "--output", help="Zieldatei")
     ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--sheet", help="XLSX-Blattname (Standard: aktives Blatt)")
-    ap.add_argument("--list", action="store_true", help="Matrix als JSON zeigen")
+    modes = ap.add_mutually_exclusive_group()
+    modes.add_argument("--list", action="store_true", help="Matrix als JSON zeigen")
+    modes.add_argument(
+        "--list-sheets", action="store_true", help="XLSX-Tabellenblätter als JSON zeigen"
+    )
     args = ap.parse_args(argv)
     if args.list:
         print(json.dumps({"inputs": MATRIX, "refused": sorted(REFUSED),
                           "deps": {k: v[0] for k, v in DEPS.items()}},
                          indent=2, sort_keys=True))
+        return 0
+    if args.list_sheets:
+        if len(args.inputs) != 1 or args.output is not None or args.sheet is not None or args.overwrite:
+            ap.error("--list-sheets erwartet genau eine XLSX-Datei ohne Konvertierungsoptionen")
+        source = Path(args.inputs[0])
+        if source.suffix.lower() != ".xlsx":
+            ap.error("--list-sheets erwartet eine XLSX-Datei")
+        with open_workbook(source) as workbook:
+            print(json.dumps([ws.title for ws in workbook.worksheets]))
         return 0
     if not args.inputs or not args.output:
         fail("EINGABE und -o AUSGABE angeben (oder --list)")
