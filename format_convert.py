@@ -42,8 +42,8 @@ DEPS = {
 MATRIX = {
     ".md": [".pdf", ".docx", ".txt", ".md"],
     ".txt": [".pdf", ".docx", ".txt", ".md"],
-    ".html": [".pdf", ".txt", ".md"],
-    ".htm": [".pdf", ".txt", ".md"],
+    ".html": [".pdf", ".docx", ".txt", ".md"],
+    ".htm": [".pdf", ".docx", ".txt", ".md"],
     ".csv": [".xlsx", ".md", ".txt"],
     ".json": [".xlsx", ".md", ".txt"],
     ".xlsx": [".csv", ".md", ".txt", ".pdf"],

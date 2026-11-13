@@ -14,7 +14,8 @@ python format_convert.py Mappe.xlsx -o Daten.csv --sheet "Daten 2026"
 
 | Input | Output |
 |---|---|
-| `.md` / `.txt` / `.html` | `.pdf`, `.docx`, `.txt`, `.md` |
+| `.md` / `.txt` | `.pdf`, `.docx`, `.txt`, `.md` |
+| `.html` / `.htm` | `.pdf`, `.docx`, `.txt`, `.md` (text extraction) |
 | `.csv` / `.json` | `.xlsx`, `.md`, `.txt` |
 | `.xlsx` | `.csv`, `.md`, `.txt`, `.pdf` (`--sheet` selects a sheet, default: active) |
 | `.docx` | `.txt`, `.md`, `.pdf` (text + headings; complex layout is not preserved) |

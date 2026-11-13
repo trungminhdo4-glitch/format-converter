@@ -148,6 +148,25 @@ class FormatConvertTests(unittest.TestCase):
         self.assertIn("Hi", content)
         self.assertIn("A & B", content)
 
+    def test_html_and_htm_to_docx(self):
+        from docx import Document
+
+        listing = run("--list")
+        self.assertEqual(listing.returncode, 0, listing.stderr)
+        matrix = json.loads(listing.stdout)["inputs"]
+        for suffix in (".html", ".htm"):
+            with self.subTest(suffix=suffix):
+                self.assertIn(".docx", matrix[suffix])
+                src = self.d / f"input{suffix}"
+                src.write_text("<h1>Übersicht</h1><p>A &amp; B</p>", encoding="utf-8")
+                out = self.d / f"{suffix[1:]}.docx"
+                result = run(str(src), "-o", str(out))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    [paragraph.text for paragraph in Document(str(out)).paragraphs],
+                    ["Übersicht", "A & B"],
+                )
+
     def test_xlsx_to_pdf_and_md(self):
         import openpyxl
         src = self.d / "j.xlsx"
