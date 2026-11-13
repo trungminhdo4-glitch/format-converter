@@ -314,7 +314,7 @@ class FormatConvertTests(unittest.TestCase):
         workbook = load_workbook(out)
         try:
             self.assertEqual(
-                list(workbook.active.values),
+                list(workbook["multiline"].values),
                 [("Titel\r\nFortsetzung", "Wert"), ("Alpha", "42")],
             )
         finally:
