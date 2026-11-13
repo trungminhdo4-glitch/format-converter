@@ -303,6 +303,23 @@ class FormatConvertTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("| Schäfer | Gießen |", out.read_text(encoding="utf-8"))
 
+    def test_csv_semicolon_after_multiline_quoted_header(self):
+        from openpyxl import load_workbook
+
+        src = self.d / "multiline.csv"
+        src.write_bytes(b'"Titel\r\nFortsetzung";Wert\r\nAlpha;42\r\n')
+        out = self.d / "multiline.xlsx"
+        result = run(str(src), "-o", str(out))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        workbook = load_workbook(out)
+        try:
+            self.assertEqual(
+                list(workbook.active.values),
+                [("Titel\r\nFortsetzung", "Wert"), ("Alpha", "42")],
+            )
+        finally:
+            workbook.close()
+
     def test_csv_utf16_refused_cleanly(self):
         src = self.d / "u16.csv"
         src.write_bytes("Name;Ort\r\nA;B\r\n".encode("utf-16"))

@@ -117,13 +117,16 @@ def read_csv_text(path):
 
 
 def csv_delimiter(text):
-    """Separator of the header line: the most frequent of , ; TAB outside double quotes (tie -> ',')."""
+    """Separator of the first CSV record: most frequent of , ; TAB outside quotes (tie -> ',')."""
     counts, quoted = {",": 0, ";": 0, "\t": 0}, False
-    for ch in text.split("\n", 1)[0]:
+    for ch in text:
         if ch == '"':
             quoted = not quoted
-        elif not quoted and ch in counts:
-            counts[ch] += 1
+        elif not quoted:
+            if ch in "\r\n":
+                break
+            if ch in counts:
+                counts[ch] += 1
     return max(counts, key=lambda c: (counts[c], c == ","))
 
 
