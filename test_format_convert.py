@@ -75,6 +75,24 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_xlsx_export_accepts_brackets_in_the_input_filename(self):
+        from openpyxl import load_workbook
+
+        src = self.d / "Report [2026].csv"
+        _ = src.write_text("Name;Betrag\nAda;12,50\n", encoding="utf-8")
+        out = self.d / "report.xlsx"
+        result = run(str(src), "-o", str(out))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        book = load_workbook(out, read_only=True)
+        try:
+            self.assertEqual(book.sheetnames, ["Report _2026_"])
+            self.assertEqual(
+                list(book["Report _2026_"].values),
+                [("Name", "Betrag"), ("Ada", "12,50")],
+            )
+        finally:
+            book.close()
+
     def test_xlsx_keeps_imported_strings_literal_and_json_numbers_numeric(self):
         from openpyxl import load_workbook
 

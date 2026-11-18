@@ -59,6 +59,9 @@ REFUSED = {".exe", ".msi", ".bat", ".ps1", ".zip", ".7z", ".rar",
            ".mp3", ".mp4", ".avi", ".mkv", ".wav", ".mov"}
 
 
+XLSX_TITLE_REPLACEMENTS = str.maketrans(dict.fromkeys("[]:*?/\\", "_"))
+
+
 def fail(msg: str) -> NoReturn:
     print(f"FEHLER: {msg}", file=sys.stderr)
     raise SystemExit(2)
@@ -332,7 +335,7 @@ def _write_conversion(inputs, tmp, sheet):
         header, rows = read_table(src, suf, sheet)
         wb = oxl.Workbook()
         ws = wb.active
-        ws.title = src.stem[:31]
+        ws.title = src.stem.translate(XLSX_TITLE_REPLACEMENTS)[:31]
         for row_number, row in enumerate(chain(([str(h) for h in header],), rows), 1):
             for column, value in enumerate(row, 1):
                 cell = ws.cell(row=row_number, column=column, value=value)
