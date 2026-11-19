@@ -121,15 +121,25 @@ def read_csv_text(path):
 
 def csv_delimiter(text):
     """Separator of the first CSV record: the most frequent of , ; TAB outside double quotes (tie -> ',')."""
-    counts, quoted = {",": 0, ";": 0, "\t": 0}, False
-    for ch in text:
-        if ch == '"':
-            quoted = not quoted
-        elif not quoted:
-            if ch in "\r\n":
-                break
-            if ch in counts:
-                counts[ch] += 1
+    counts = {",": 0, ";": 0, "\t": 0}
+    quoted = False
+    at_field_start = True
+    characters = iter(enumerate(text))
+    for index, ch in characters:
+        if quoted:
+            if ch == '"':
+                if text[index + 1:index + 2] == '"':
+                    next(characters)
+                else:
+                    quoted = False
+            continue
+        if ch in "\r\n":
+            break
+        if ch == '"' and at_field_start:
+            quoted = True
+        at_field_start = ch in counts
+        if at_field_start:
+            counts[ch] += 1
     return max(counts, key=lambda c: (counts[c], c == ","))
 
 
