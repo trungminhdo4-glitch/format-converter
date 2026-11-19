@@ -340,6 +340,21 @@ class FormatConvertTests(unittest.TestCase):
         self.assertIn("| Name; Vorname | Notiz; kurz; lang | Ort |", md)
         self.assertIn("| Do; Trung | x; y | Berlin |", md)
 
+    def test_csv_delimiter_uses_first_logical_record(self):
+        from format_convert import read_table
+
+        cases = [
+            ('"Name\ncontinued";Amount\nAlice;12,50\n', ["Name\ncontinued", "Amount"], ["Alice", "12,50"]),
+            ('"Name\r\ncontinued"\tAmount\r\nAlice\t12,50\r\n', ["Name\r\ncontinued", "Amount"], ["Alice", "12,50"]),
+            ('Name;Amount\rAlice;12,50, EUR\r', ["Name", "Amount"], ["Alice", "12,50, EUR"]),
+        ]
+        for contents, header, row in cases:
+            with self.subTest(contents=contents):
+                src = self.d / "records.csv"
+                src.write_bytes(contents.encode("utf-8"))
+                self.assertEqual(read_table(src, ".csv"), (header, [row]))
+
+
     def test_csv_single_column_keeps_semicolons_in_data(self):
         src = self.d / "one.csv"
         src.write_text("Notiz\nerst a; dann b\n", encoding="utf-8")
