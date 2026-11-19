@@ -355,6 +355,20 @@ class FormatConvertTests(unittest.TestCase):
                 self.assertEqual(read_table(src, ".csv"), (header, [row]))
 
 
+    def test_csv_quote_only_opens_at_start_of_field(self):
+        from format_convert import read_table
+
+        cases = [
+            ('Display "name;City\nAlice;Berlin\n', ['Display "name', "City"]),
+            ('Id;"Label ""with"" commas, a, b, c";City\r\n1;Plain;Berlin\r\n',
+             ["Id", 'Label "with" commas, a, b, c', "City"]),
+        ]
+        for contents, header in cases:
+            with self.subTest(contents=contents):
+                src = self.d / "quoted-header.csv"
+                src.write_bytes(contents.encode("utf-8"))
+                self.assertEqual(read_table(src, ".csv")[0], header)
+
     def test_csv_single_column_keeps_semicolons_in_data(self):
         src = self.d / "one.csv"
         src.write_text("Notiz\nerst a; dann b\n", encoding="utf-8")
