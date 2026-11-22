@@ -21,12 +21,18 @@ def run(*args):
 
 
 class FormatConvertTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.d = Path(self.tmp.name)
+    _directory: Path | None = None
 
-    def tearDown(self):
-        self.tmp.cleanup()
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self._directory = Path(tmp.name)
+
+    @property
+    def d(self) -> Path:
+        directory = self._directory
+        assert directory is not None
+        return directory
 
     def test_list_matrix(self):
         p = run("--list")
@@ -212,8 +218,10 @@ class FormatConvertTests(unittest.TestCase):
         import openpyxl
         src = self.d / "j.xlsx"
         wb = openpyxl.Workbook()
-        wb.active.append(["n", "w"])
-        wb.active.append(["a", 1])
+        sheet = wb.active
+        assert sheet is not None
+        sheet.append(["n", "w"])
+        sheet.append(["a", 1])
         wb.save(str(src))
         pdf = self.d / "j.pdf"
         self.assertEqual(run(str(src), "-o", str(pdf)).returncode, 0)
@@ -250,8 +258,10 @@ class FormatConvertTests(unittest.TestCase):
         import openpyxl
         src = self.d / "m.xlsx"
         wb = openpyxl.Workbook()
-        wb.active.title = "Erstes"
-        wb.active.append(["x"])
+        sheet = wb.active
+        assert sheet is not None
+        sheet.title = "Erstes"
+        sheet.append(["x"])
         ws2 = wb.create_sheet("Zweites")
         ws2.append(["n", "w"])
         ws2.append(["a", 1])
