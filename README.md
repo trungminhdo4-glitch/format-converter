@@ -23,8 +23,9 @@ python format_convert.py Mappe.xlsx -o Daten.csv --sheet "Daten 2026"
 | `.pdf` + `.pdf` | `.pdf` (merge; single `.pdf` → `.pdf` copies) |
 
 CSV input: UTF-8 (with or without BOM) or Windows-1252, as German Excel saves
-"CSV (Trennzeichen-getrennt)"; the separator (`,` `;` or TAB) is the most frequent one in
-the header line outside quotes (tie: `,`). UTF-16 CSV ("Unicode-Text") is refused with
+"CSV (Trennzeichen-getrennt)"; the separator (`,` `;` or TAB) is the most frequent one
+outside quotes in the first record after any empty leading lines (tie: `,`).
+UTF-16 CSV ("Unicode-Text") is refused with
 exit code 2 — save as "CSV UTF-8". Cell values stay text (`12,50` is not converted).
 In XLSX output, strings from CSV and JSON are stored as literal text, including
 values such as `=1+2` and `#N/A`. JSON numbers remain numeric.

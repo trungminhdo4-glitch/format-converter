@@ -355,6 +355,23 @@ class FormatConvertTests(unittest.TestCase):
                 self.assertEqual(read_table(src, ".csv"), (header, [row]))
 
 
+    def test_csv_ignores_blank_preamble_but_preserves_later_empty_rows(self) -> None:
+        src = self.d / "preamble.csv"
+        _ = src.write_bytes(
+            b'\xef\xbb\xbf\r\n\n"Name\r\ncontinued";Amount\r\n\r\nAda;12,50\r\n'
+        )
+        self.assertEqual(
+            format_convert.read_table(src, ".csv"),
+            (["Name\r\ncontinued", "Amount"], [[], ["Ada", "12,50"]]),
+        )
+
+    def test_csv_preserves_quoted_empty_record_and_handles_only_blank_lines(self) -> None:
+        src = self.d / "empty.csv"
+        _ = src.write_bytes(b'\r\n""\r\nvalue\r\n')
+        self.assertEqual(format_convert.read_table(src, ".csv"), ([""], [["value"]]))
+        _ = src.write_bytes(b'\r\n\n\r')
+        self.assertEqual(format_convert.read_table(src, ".csv"), ([], []))
+
     def test_csv_quote_only_opens_at_start_of_field(self):
         from format_convert import read_table
 

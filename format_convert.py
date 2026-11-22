@@ -105,7 +105,7 @@ def read_text_input(path, suffix):
     fail(f"kein Text-Import fuer {suffix}")
 
 
-def read_csv_text(path):
+def read_csv_text(path: Path) -> str:
     """UTF-8 (with/without BOM), else Windows-1252 (German Excel 'CSV (Trennzeichen-getrennt)').
     NUL bytes mean UTF-16 ('Unicode-Text') or binary: refused instead of guessed."""
     raw = path.read_bytes()
@@ -168,7 +168,9 @@ def worksheet_rows(path: Path, sheet: str | None):
 
 def read_table(path, suffix, sheet=None):
     if suffix == ".csv":
-        text = read_csv_text(path)
+        # Drop only the empty physical lines before the first record. Later
+        # blank records and line breaks inside quoted fields are data.
+        text = read_csv_text(path).lstrip("\r\n")
         rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=csv_delimiter(text)))
         return rows[0] if rows else [], rows[1:]
     if suffix == ".json":
