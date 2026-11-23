@@ -81,6 +81,34 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_markdown_keeps_pipes_and_line_breaks_inside_cells(self) -> None:
+        src = self.d / "cells.csv"
+        _ = src.write_bytes(
+            b'"Heading|one",Note\r\n"a\\|b","line 1\r\nline 2\rline 3\n<text> &"\r\n'
+        )
+        md = self.d / "cells.md"
+        result = run(str(src), "-o", str(md))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            md.read_text(encoding="utf-8").splitlines(),
+            [
+                "| Heading&#124;one | Note |",
+                "| --- | --- |",
+                "| a&#92;&#124;b | line 1<br>line 2<br>line 3<br>&lt;text&gt; &amp; |",
+            ],
+        )
+
+    def test_plain_text_table_is_unchanged(self) -> None:
+        src = self.d / "cells.csv"
+        _ = src.write_bytes(b'"Heading|one",Note\n"a|b","line 1\nline 2"\n')
+        txt = self.d / "cells.txt"
+        result = run(str(src), "-o", str(txt))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            txt.read_text(encoding="utf-8"),
+            "| Heading|one | Note |\n| --- | --- |\n| a|b | line 1\nline 2 |\n",
+        )
+
     def test_xlsx_export_accepts_brackets_in_the_input_filename(self):
         from openpyxl import load_workbook
 

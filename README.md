@@ -35,6 +35,9 @@ Pass a name to `--sheet` to select that worksheet. XLSX-to-CSV export writes
 rows as it reads them, so it can export large worksheets without holding all
 their rows in memory.
 
+Markdown tables keep literal `|` characters and embedded line breaks inside
+their original cells using HTML entities and `<br>`; `.txt` export is unchanged.
+
 Deliberately refused with exit code 2: audio, video, archives,
 executables, and any unknown extension. Existing output files are never
 overwritten without `--overwrite`. Writes are atomic (temp + replace).

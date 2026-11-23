@@ -26,6 +26,7 @@ import os
 import sys
 import tempfile
 from contextlib import closing, contextmanager
+from html import escape
 from html.parser import HTMLParser
 from itertools import chain
 from pathlib import Path
@@ -193,10 +194,18 @@ def read_table(path, suffix, sheet=None):
     fail(f"kein Tabellen-Import fuer {suffix}")
 
 
-def table_to_markdown(header, rows):
-    out = ["| " + " | ".join(map(str, header)) + " |",
-           "| " + " | ".join("---" for _ in header) + " |"]
-    out += ["| " + " | ".join(map(str, r)) + " |" for r in rows]
+def markdown_cell(value: object) -> str:
+    text = escape(str(value), quote=False).replace("\\", "&#92;").replace("|", "&#124;")
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+
+
+def table_to_markdown(header, rows, *, escape_cells: bool = True):
+    cell_text = markdown_cell if escape_cells else str
+    out = [
+        "| " + " | ".join(map(cell_text, header)) + " |",
+        "| " + " | ".join("---" for _ in header) + " |",
+    ]
+    out += ["| " + " | ".join(map(cell_text, r)) + " |" for r in rows]
     return "\n".join(out) + "\n"
 
 
@@ -312,7 +321,7 @@ def convert(inputs, output, overwrite=False, sheet=None):
     return str(out)
 
 
-def _write_conversion(inputs, tmp, sheet):
+def _write_conversion(inputs, tmp: Path, sheet):
     srcs = [Path(p) for p in inputs]
     for s in srcs:
         if not s.is_file():
@@ -368,9 +377,12 @@ def _write_conversion(inputs, tmp, sheet):
     else:
         if suf in (".csv", ".json", ".xlsx"):
             header, rows = read_table(src, suf, sheet)
-            tmp.write_text(table_to_markdown([str(h) for h in header], rows), encoding="utf-8")
+            _ = tmp.write_text(
+                table_to_markdown(header, rows, escape_cells=out_suf == ".md"),
+                encoding="utf-8",
+            )
         else:
-            tmp.write_text(read_text_input(src, suf), encoding="utf-8")
+            _ = tmp.write_text(read_text_input(src, suf), encoding="utf-8")
 
 
 def main(argv=None):
