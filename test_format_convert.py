@@ -109,18 +109,36 @@ class FormatConvertTests(unittest.TestCase):
             "| Heading|one | Note |\n| --- | --- |\n| a|b | line 1\nline 2 |\n",
         )
 
-    def test_markdown_preserves_inline_code_inside_a_cell(self) -> None:
+    def test_markdown_shows_backticks_literally_inside_a_cell(self) -> None:
         cases = {
-            "Prefix `R&D` suffix": "Prefix `R&D` suffix",
-            "`a|b` and ``one ` two|three``": r"`a\|b` and ``one ` two\|three``",
-            "`line 1\r\nline 2`": "`line 1 line 2`",
-            "unclosed `a|b": "unclosed `a&#124;b",
-            r"Prefix \\`R&D`": r"Prefix \\`R&D`",
-            r"Prefix \`R&D": r"Prefix \`R&amp;D",
+            "Prefix `R&D` suffix": "Prefix &#96;R&amp;D&#96; suffix",
+            "`a|b` and ``one ` two``": (
+                "&#96;a&#124;b&#96; and &#96;&#96;one &#96; two&#96;&#96;"
+            ),
+            "`line 1\r\nline 2`": "&#96;line 1<br>line 2&#96;",
+            # GFM review: an odd number of backslashes escapes only the first
+            # backtick, so the rest of the run still opened a code span that
+            # displayed the HTML entities verbatim.
+            "\\```a&b``": "&#92;&#96;&#96;&#96;a&amp;b&#96;&#96;",
+            "x \\```a|b`` y": "x &#92;&#96;&#96;&#96;a&#124;b&#96;&#96; y",
+            "\\\\\\```a<b``": "&#92;&#92;&#92;&#96;&#96;&#96;a&lt;b&#96;&#96;",
+            "\\\\```a&b``": "&#92;&#92;&#96;&#96;&#96;a&amp;b&#96;&#96;",
+            "C:\\Temp \\\\server": "C:\\Temp &#92;\\server",
         }
         for content, expected in cases.items():
             with self.subTest(content=content):
                 self.assertEqual(format_convert.markdown_cell(content), expected)
+
+    def test_markdown_cell_never_opens_a_code_span(self) -> None:
+        for slashes in range(5):
+            for opener in range(1, 4):
+                for closer in range(1, 4):
+                    content = "\\" * slashes + "`" * opener + "a&b|c" + "`" * closer
+                    with self.subTest(content=content):
+                        cell = format_convert.markdown_cell(content)
+                        self.assertNotIn("`", cell)
+                        self.assertNotIn("\\", cell)
+                        self.assertNotIn("|", cell)
 
     def test_xlsx_export_accepts_brackets_in_the_input_filename(self):
         from openpyxl import load_workbook

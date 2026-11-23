@@ -36,7 +36,9 @@ rows as it reads them, so it can export large worksheets without holding all
 their rows in memory.
 
 Markdown tables keep literal `|` characters and embedded line breaks inside
-their original cells using HTML entities and `<br>`; `.txt` export is unchanged.
+their original cells using HTML entities and `<br>`. Backticks and escaping
+backslashes are written as entities too, so they show as typed and never open
+an inline code span. `.txt` export is unchanged.
 
 Deliberately refused with exit code 2: audio, video, archives,
 executables, and any unknown extension. Existing output files are never

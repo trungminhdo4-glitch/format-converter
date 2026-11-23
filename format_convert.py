@@ -195,32 +195,23 @@ def read_table(path, suffix, sheet=None):
     fail(f"kein Tabellen-Import fuer {suffix}")
 
 
-_CODE_SPAN = re.compile(r"(?<![`\\])(?:\\\\)*(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
-_BEFORE_ENTITY = re.compile(r"\\+(?=[&|\n])")
-
-
-def _markdown_cell_text(text: str) -> str:
-    return (
-        _BEFORE_ENTITY.sub(
-            lambda match: "&#92;" * len(match[0]), escape(text, quote=False)
-        )
-        .replace("|", "&#124;")
-        .replace("\n", "<br>")
-    )
+# A backslash only escapes ASCII punctuation (CommonMark); "\n" becomes "<br>".
+_ESCAPING_BACKSLASH = re.compile(r"\\(?=[!-/:-@\[-`{-~\n])")
 
 
 def markdown_cell(value: object) -> str:
+    """Render a cell value as literal text inside a GFM table cell.
+
+    Backticks become entities, so no code span can open; a backslash that
+    would escape the next character becomes an entity, so it stays visible.
+    """
     text = str(value).replace("\r\n", "\n").replace("\r", "\n")
-    parts: list[str] = []
-    start = 0
-    for span in _CODE_SPAN.finditer(text):
-        parts.append(_markdown_cell_text(text[start : span.start()]))
-        # GFM removes escaped pipes at the table layer, before parsing code.
-        # Markdown code spans render physical line endings as spaces.
-        parts.append(span.group().replace("|", r"\|").replace("\n", " "))
-        start = span.end()
-    parts.append(_markdown_cell_text(text[start:]))
-    return "".join(parts)
+    return (
+        _ESCAPING_BACKSLASH.sub("&#92;", escape(text, quote=False))
+        .replace("|", "&#124;")
+        .replace("`", "&#96;")
+        .replace("\n", "<br>")
+    )
 
 
 def table_to_markdown(header, rows, *, escape_cells: bool = True):
