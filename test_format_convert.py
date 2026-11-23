@@ -109,6 +109,17 @@ class FormatConvertTests(unittest.TestCase):
             "| Heading|one | Note |\n| --- | --- |\n| a|b | line 1\nline 2 |\n",
         )
 
+    def test_markdown_preserves_inline_code_inside_a_cell(self) -> None:
+        cases = {
+            "Prefix `R&D` suffix": "Prefix `R&D` suffix",
+            "`a|b` and ``one ` two|three``": r"`a\|b` and ``one ` two\|three``",
+            "`line 1\r\nline 2`": "`line 1 line 2`",
+            "unclosed `a|b": "unclosed `a&#124;b",
+        }
+        for content, expected in cases.items():
+            with self.subTest(content=content):
+                self.assertEqual(format_convert.markdown_cell(content), expected)
+
     def test_xlsx_export_accepts_brackets_in_the_input_filename(self):
         from openpyxl import load_workbook
 

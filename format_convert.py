@@ -23,6 +23,7 @@ import csv
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 from contextlib import closing, contextmanager
@@ -194,9 +195,30 @@ def read_table(path, suffix, sheet=None):
     fail(f"kein Tabellen-Import fuer {suffix}")
 
 
+_CODE_SPAN = re.compile(r"(?<![`\\])(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
+
+
+def _markdown_cell_text(text: str) -> str:
+    return (
+        escape(text, quote=False)
+        .replace("\\", "&#92;")
+        .replace("|", "&#124;")
+        .replace("\n", "<br>")
+    )
+
+
 def markdown_cell(value: object) -> str:
-    text = escape(str(value), quote=False).replace("\\", "&#92;").replace("|", "&#124;")
-    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    parts: list[str] = []
+    start = 0
+    for span in _CODE_SPAN.finditer(text):
+        parts.append(_markdown_cell_text(text[start : span.start()]))
+        # GFM removes escaped pipes at the table layer, before parsing code.
+        # Markdown code spans render physical line endings as spaces.
+        parts.append(span.group().replace("|", r"\|").replace("\n", " "))
+        start = span.end()
+    parts.append(_markdown_cell_text(text[start:]))
+    return "".join(parts)
 
 
 def table_to_markdown(header, rows, *, escape_cells: bool = True):
