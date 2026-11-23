@@ -197,20 +197,23 @@ def read_table(path, suffix, sheet=None):
 
 # A backslash only escapes ASCII punctuation (CommonMark); "\n" becomes "<br>".
 _ESCAPING_BACKSLASH = re.compile(r"\\(?=[!-/:-@\[-`{-~\n])")
+# Characters that open inline Markdown (code, emphasis, strikethrough, links).
+_INLINE_ENTITIES = str.maketrans({
+    "|": "&#124;", "`": "&#96;", "*": "&#42;", "_": "&#95;",
+    "~": "&#126;", "[": "&#91;", "]": "&#93;", "\n": "<br>",
+})
 
 
 def markdown_cell(value: object) -> str:
     """Render a cell value as literal text inside a GFM table cell.
 
-    Backticks become entities, so no code span can open; a backslash that
-    would escape the next character becomes an entity, so it stays visible.
+    Inline delimiters become entities, so no code span, emphasis,
+    strikethrough or link can open; a backslash that would escape the next
+    character becomes an entity, so it stays visible.
     """
     text = str(value).replace("\r\n", "\n").replace("\r", "\n")
-    return (
-        _ESCAPING_BACKSLASH.sub("&#92;", escape(text, quote=False))
-        .replace("|", "&#124;")
-        .replace("`", "&#96;")
-        .replace("\n", "<br>")
+    return _ESCAPING_BACKSLASH.sub("&#92;", escape(text, quote=False)).translate(
+        _INLINE_ENTITIES
     )
 
 
