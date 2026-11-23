@@ -140,6 +140,43 @@ class FormatConvertTests(unittest.TestCase):
                         self.assertNotIn("\\", cell)
                         self.assertNotIn("|", cell)
 
+    def test_markdown_cell_keeps_emphasis_links_and_strikethrough_literal(self) -> None:
+        # GFM review (markdown-it-py 4.2.0, table + strikethrough): these
+        # rendered as <em>, <strong>, <s>, <a> and <img> instead of text.
+        cases = {
+            "*a* _b_": "&#42;a&#42; &#95;b&#95;",
+            "**www.x.de**": "&#42;&#42;www.x.de&#42;&#42;",
+            "~~old~~": "&#126;&#126;old&#126;&#126;",
+            "[x](u) ![i](u)": "&#91;x&#93;(u) !&#91;i&#93;(u)",
+            "\\*a\\*": "&#92;&#42;a&#92;&#42;",
+            "snake_case :smile:": "snake&#95;case :smile:",
+        }
+        for content, expected in cases.items():
+            with self.subTest(content=content):
+                self.assertEqual(format_convert.markdown_cell(content), expected)
+
+    def test_markdown_cell_property_inert_and_round_trips(self) -> None:
+        # Seeded fuzzing without a renderer: every Markdown-active character
+        # is an entity, a remaining backslash escapes nothing, and decoding
+        # the entities gives back the cell text.
+        import html
+        import random
+        import re
+
+        alphabet = list("ab 1*_[]`|\\<>&~!():#-") + [
+            ":smile:", "\n", "\r\n", "\r", "&amp;", "&#42;", "](u)", "![",
+            "**", "__", "~~", "www.x.de", "\U0001F600",
+        ]
+        rnd = random.Random(20261123)
+        for _ in range(9000):
+            content = "".join(rnd.choice(alphabet) for _ in range(rnd.randint(0, 10)))
+            cell = format_convert.markdown_cell(content)
+            for char in "*_~[]`|\n\r":
+                self.assertNotIn(char, cell, content)
+            self.assertIsNone(re.search(r"\\[!-/:-@\[-`{-~]", cell), content)
+            expected = content.replace("\r\n", "\n").replace("\r", "\n")
+            self.assertEqual(html.unescape(cell.replace("<br>", "\n")), expected)
+
     def test_xlsx_export_accepts_brackets_in_the_input_filename(self):
         from openpyxl import load_workbook
 
