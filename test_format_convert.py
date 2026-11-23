@@ -313,6 +313,15 @@ class FormatConvertTests(unittest.TestCase):
         from pypdf import PdfReader
         self.assertEqual(len(PdfReader(str(copy)).pages), 1)
 
+    def test_sheet_on_non_xlsx_does_not_write_output(self) -> None:
+        src = self.d / "source.csv"
+        _ = src.write_text("name,score\nAda,10\n", encoding="utf-8")
+        out = self.d / "result.xlsx"
+        result = run(str(src), "-o", str(out), "--sheet", "Report")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("--sheet", result.stderr)
+        self.assertFalse(out.exists())
+
     def test_sheet_select(self):
         import openpyxl
         src = self.d / "m.xlsx"
