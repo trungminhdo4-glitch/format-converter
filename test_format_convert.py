@@ -115,6 +115,8 @@ class FormatConvertTests(unittest.TestCase):
             "`a|b` and ``one ` two|three``": r"`a\|b` and ``one ` two\|three``",
             "`line 1\r\nline 2`": "`line 1 line 2`",
             "unclosed `a|b": "unclosed `a&#124;b",
+            r"Prefix \\`R&D`": r"Prefix \\`R&D`",
+            r"Prefix \`R&D": r"Prefix \`R&amp;D",
         }
         for content, expected in cases.items():
             with self.subTest(content=content):

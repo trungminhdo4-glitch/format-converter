@@ -195,13 +195,15 @@ def read_table(path, suffix, sheet=None):
     fail(f"kein Tabellen-Import fuer {suffix}")
 
 
-_CODE_SPAN = re.compile(r"(?<![`\\])(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
+_CODE_SPAN = re.compile(r"(?<![`\\])(?:\\\\)*(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
+_BEFORE_ENTITY = re.compile(r"\\+(?=[&|\n])")
 
 
 def _markdown_cell_text(text: str) -> str:
     return (
-        escape(text, quote=False)
-        .replace("\\", "&#92;")
+        _BEFORE_ENTITY.sub(
+            lambda match: "&#92;" * len(match[0]), escape(text, quote=False)
+        )
         .replace("|", "&#124;")
         .replace("\n", "<br>")
     )
