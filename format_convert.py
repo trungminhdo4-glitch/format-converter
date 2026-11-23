@@ -320,6 +320,8 @@ def _write_conversion(inputs, tmp, sheet):
         if s.suffix.lower() not in MATRIX:
             fail(f"Quelltyp nicht unterstuetzt: {s.suffix} (--list zeigt die Matrix)")
     in_suf = [s.suffix.lower() for s in srcs]
+    if sheet is not None and in_suf != [".xlsx"]:
+        fail("--sheet erwartet genau eine XLSX-Eingabedatei")
     out_suf = tmp.suffix.lower()
     if out_suf == ".pdf" and all(s == ".pdf" for s in in_suf):
         pypdf = need("pypdf")
