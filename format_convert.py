@@ -23,9 +23,11 @@ import csv
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 from contextlib import closing, contextmanager
+from html import escape
 from html.parser import HTMLParser
 from itertools import chain
 from pathlib import Path
@@ -105,7 +107,7 @@ def read_text_input(path, suffix):
     fail(f"kein Text-Import fuer {suffix}")
 
 
-def read_csv_text(path):
+def read_csv_text(path: Path) -> str:
     """UTF-8 (with/without BOM), else Windows-1252 (German Excel 'CSV (Trennzeichen-getrennt)').
     NUL bytes mean UTF-16 ('Unicode-Text') or binary: refused instead of guessed."""
     raw = path.read_bytes()
@@ -168,7 +170,9 @@ def worksheet_rows(path: Path, sheet: str | None):
 
 def read_table(path, suffix, sheet=None):
     if suffix == ".csv":
-        text = read_csv_text(path)
+        # Drop only the empty physical lines before the first record. Later
+        # blank records and line breaks inside quoted fields are data.
+        text = read_csv_text(path).lstrip("\r\n")
         rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=csv_delimiter(text)))
         return rows[0] if rows else [], rows[1:]
     if suffix == ".json":
@@ -191,10 +195,32 @@ def read_table(path, suffix, sheet=None):
     fail(f"kein Tabellen-Import fuer {suffix}")
 
 
-def table_to_markdown(header, rows):
-    out = ["| " + " | ".join(map(str, header)) + " |",
-           "| " + " | ".join("---" for _ in header) + " |"]
-    out += ["| " + " | ".join(map(str, r)) + " |" for r in rows]
+# A backslash only escapes ASCII punctuation (CommonMark); "\n" becomes "<br>".
+_ESCAPING_BACKSLASH = re.compile(r"\\(?=[!-/:-@\[-`{-~\n])")
+
+
+def markdown_cell(value: object) -> str:
+    """Render a cell value as literal text inside a GFM table cell.
+
+    Backticks become entities, so no code span can open; a backslash that
+    would escape the next character becomes an entity, so it stays visible.
+    """
+    text = str(value).replace("\r\n", "\n").replace("\r", "\n")
+    return (
+        _ESCAPING_BACKSLASH.sub("&#92;", escape(text, quote=False))
+        .replace("|", "&#124;")
+        .replace("`", "&#96;")
+        .replace("\n", "<br>")
+    )
+
+
+def table_to_markdown(header, rows, *, escape_cells: bool = True):
+    cell_text = markdown_cell if escape_cells else str
+    out = [
+        "| " + " | ".join(map(cell_text, header)) + " |",
+        "| " + " | ".join("---" for _ in header) + " |",
+    ]
+    out += ["| " + " | ".join(map(cell_text, r)) + " |" for r in rows]
     return "\n".join(out) + "\n"
 
 
@@ -310,7 +336,7 @@ def convert(inputs, output, overwrite=False, sheet=None):
     return str(out)
 
 
-def _write_conversion(inputs, tmp, sheet):
+def _write_conversion(inputs, tmp: Path, sheet):
     srcs = [Path(p) for p in inputs]
     for s in srcs:
         if not s.is_file():
@@ -366,9 +392,12 @@ def _write_conversion(inputs, tmp, sheet):
     else:
         if suf in (".csv", ".json", ".xlsx"):
             header, rows = read_table(src, suf, sheet)
-            tmp.write_text(table_to_markdown([str(h) for h in header], rows), encoding="utf-8")
+            _ = tmp.write_text(
+                table_to_markdown(header, rows, escape_cells=out_suf == ".md"),
+                encoding="utf-8",
+            )
         else:
-            tmp.write_text(read_text_input(src, suf), encoding="utf-8")
+            _ = tmp.write_text(read_text_input(src, suf), encoding="utf-8")
 
 
 def main(argv=None):

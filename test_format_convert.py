@@ -21,12 +21,18 @@ def run(*args):
 
 
 class FormatConvertTests(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.d = Path(self.tmp.name)
+    _directory: Path | None = None
 
-    def tearDown(self):
-        self.tmp.cleanup()
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self._directory = Path(tmp.name)
+
+    @property
+    def d(self) -> Path:
+        directory = self._directory
+        assert directory is not None
+        return directory
 
     def test_list_matrix(self):
         p = run("--list")
@@ -74,6 +80,65 @@ class FormatConvertTests(unittest.TestCase):
         src.write_text('[{"a": 1, "b": "x"}]', encoding="utf-8")
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
+
+    def test_markdown_keeps_pipes_and_line_breaks_inside_cells(self) -> None:
+        src = self.d / "cells.csv"
+        _ = src.write_bytes(
+            b'"Heading|one",Note\r\n"a\\|b","line 1\r\nline 2\rline 3\n<text> &"\r\n'
+        )
+        md = self.d / "cells.md"
+        result = run(str(src), "-o", str(md))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            md.read_text(encoding="utf-8").splitlines(),
+            [
+                "| Heading&#124;one | Note |",
+                "| --- | --- |",
+                "| a&#92;&#124;b | line 1<br>line 2<br>line 3<br>&lt;text&gt; &amp; |",
+            ],
+        )
+
+    def test_plain_text_table_is_unchanged(self) -> None:
+        src = self.d / "cells.csv"
+        _ = src.write_bytes(b'"Heading|one",Note\n"a|b","line 1\nline 2"\n')
+        txt = self.d / "cells.txt"
+        result = run(str(src), "-o", str(txt))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            txt.read_text(encoding="utf-8"),
+            "| Heading|one | Note |\n| --- | --- |\n| a|b | line 1\nline 2 |\n",
+        )
+
+    def test_markdown_shows_backticks_literally_inside_a_cell(self) -> None:
+        cases = {
+            "Prefix `R&D` suffix": "Prefix &#96;R&amp;D&#96; suffix",
+            "`a|b` and ``one ` two``": (
+                "&#96;a&#124;b&#96; and &#96;&#96;one &#96; two&#96;&#96;"
+            ),
+            "`line 1\r\nline 2`": "&#96;line 1<br>line 2&#96;",
+            # GFM review: an odd number of backslashes escapes only the first
+            # backtick, so the rest of the run still opened a code span that
+            # displayed the HTML entities verbatim.
+            "\\```a&b``": "&#92;&#96;&#96;&#96;a&amp;b&#96;&#96;",
+            "x \\```a|b`` y": "x &#92;&#96;&#96;&#96;a&#124;b&#96;&#96; y",
+            "\\\\\\```a<b``": "&#92;&#92;&#92;&#96;&#96;&#96;a&lt;b&#96;&#96;",
+            "\\\\```a&b``": "&#92;&#92;&#96;&#96;&#96;a&amp;b&#96;&#96;",
+            "C:\\Temp \\\\server": "C:\\Temp &#92;\\server",
+        }
+        for content, expected in cases.items():
+            with self.subTest(content=content):
+                self.assertEqual(format_convert.markdown_cell(content), expected)
+
+    def test_markdown_cell_never_opens_a_code_span(self) -> None:
+        for slashes in range(5):
+            for opener in range(1, 4):
+                for closer in range(1, 4):
+                    content = "\\" * slashes + "`" * opener + "a&b|c" + "`" * closer
+                    with self.subTest(content=content):
+                        cell = format_convert.markdown_cell(content)
+                        self.assertNotIn("`", cell)
+                        self.assertNotIn("\\", cell)
+                        self.assertNotIn("|", cell)
 
     def test_xlsx_export_accepts_brackets_in_the_input_filename(self):
         from openpyxl import load_workbook
@@ -212,8 +277,10 @@ class FormatConvertTests(unittest.TestCase):
         import openpyxl
         src = self.d / "j.xlsx"
         wb = openpyxl.Workbook()
-        wb.active.append(["n", "w"])
-        wb.active.append(["a", 1])
+        sheet = wb.active
+        assert sheet is not None
+        sheet.append(["n", "w"])
+        sheet.append(["a", 1])
         wb.save(str(src))
         pdf = self.d / "j.pdf"
         self.assertEqual(run(str(src), "-o", str(pdf)).returncode, 0)
@@ -250,8 +317,10 @@ class FormatConvertTests(unittest.TestCase):
         import openpyxl
         src = self.d / "m.xlsx"
         wb = openpyxl.Workbook()
-        wb.active.title = "Erstes"
-        wb.active.append(["x"])
+        sheet = wb.active
+        assert sheet is not None
+        sheet.title = "Erstes"
+        sheet.append(["x"])
         ws2 = wb.create_sheet("Zweites")
         ws2.append(["n", "w"])
         ws2.append(["a", 1])
@@ -354,6 +423,23 @@ class FormatConvertTests(unittest.TestCase):
                 src.write_bytes(contents.encode("utf-8"))
                 self.assertEqual(read_table(src, ".csv"), (header, [row]))
 
+
+    def test_csv_ignores_blank_preamble_but_preserves_later_empty_rows(self) -> None:
+        src = self.d / "preamble.csv"
+        _ = src.write_bytes(
+            b'\xef\xbb\xbf\r\n\n"Name\r\ncontinued";Amount\r\n\r\nAda;12,50\r\n'
+        )
+        self.assertEqual(
+            format_convert.read_table(src, ".csv"),
+            (["Name\r\ncontinued", "Amount"], [[], ["Ada", "12,50"]]),
+        )
+
+    def test_csv_preserves_quoted_empty_record_and_handles_only_blank_lines(self) -> None:
+        src = self.d / "empty.csv"
+        _ = src.write_bytes(b'\r\n""\r\nvalue\r\n')
+        self.assertEqual(format_convert.read_table(src, ".csv"), ([""], [["value"]]))
+        _ = src.write_bytes(b'\r\n\n\r')
+        self.assertEqual(format_convert.read_table(src, ".csv"), ([], []))
 
     def test_csv_quote_only_opens_at_start_of_field(self):
         from format_convert import read_table
