@@ -62,6 +62,7 @@ REFUSED = {".exe", ".msi", ".bat", ".ps1", ".zip", ".7z", ".rar",
 
 
 XLSX_TITLE_REPLACEMENTS = str.maketrans(dict.fromkeys("[]:*?/\\", "_"))
+XLSX_MAX_CELL_TEXT_LENGTH = 32_767
 
 
 def fail(msg: str) -> NoReturn:
@@ -376,14 +377,20 @@ def _write_conversion(inputs, tmp: Path, sheet):
             write_pdf_text(tmp, src.stem, read_text_input(src, suf))
     elif out_suf == ".xlsx":
         oxl = need("openpyxl")
+        from openpyxl.utils import get_column_letter
+
         header, rows = read_table(src, suf, sheet)
         wb = oxl.Workbook()
         ws = wb.active
         ws.title = src.stem.translate(XLSX_TITLE_REPLACEMENTS)[:31]
         for row_number, row in enumerate(chain(([str(h) for h in header],), rows), 1):
             for column, value in enumerate(row, 1):
+                is_text = isinstance(value, str)
+                if is_text and len(value) > XLSX_MAX_CELL_TEXT_LENGTH:
+                    coordinate = f"{get_column_letter(column)}{row_number}"
+                    fail(f"XLSX-Zelle {coordinate}: {len(value)} Zeichen (maximal {XLSX_MAX_CELL_TEXT_LENGTH})")
                 cell = ws.cell(row=row_number, column=column, value=value)
-                if isinstance(value, str):
+                if is_text:
                     cell.data_type = "s"
         wb.save(str(tmp))
     elif out_suf == ".docx":
