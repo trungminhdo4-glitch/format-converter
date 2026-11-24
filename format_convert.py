@@ -168,7 +168,7 @@ def worksheet_rows(path: Path, sheet: str | None):
         yield worksheet.iter_rows(values_only=True)
 
 
-def read_table(path, suffix, sheet=None):
+def read_table(path: Path, suffix, sheet=None):
     if suffix == ".csv":
         # Drop only the empty physical lines before the first record. Later
         # blank records and line breaks inside quoted fields are data.
@@ -176,7 +176,12 @@ def read_table(path, suffix, sheet=None):
         rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=csv_delimiter(text)))
         return rows[0] if rows else [], rows[1:]
     if suffix == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            fail(f"{path.name}: JSON-Eingabe muss UTF-8 sein")
+        except json.JSONDecodeError as exc:
+            fail(f"{path.name}: fehlerhaftes JSON (Zeile {exc.lineno}, Spalte {exc.colno})")
         items = data if isinstance(data, list) else [data]
         keys = []
         for item in items:
