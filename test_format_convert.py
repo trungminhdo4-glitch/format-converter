@@ -81,6 +81,36 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_xlsx_export_rejects_oversized_text_without_replacing_output(self) -> None:
+        oversized = "x" * 32_768
+        cases = (
+            ("csv", f"{oversized}\nvalue\n", "A1"),
+            ("json", json.dumps({"name": "example", "notes": oversized}), "B2"),
+        )
+        out = self.d / "existing.xlsx"
+        _ = out.write_bytes(b"original destination")
+        for suffix, content, cell in cases:
+            with self.subTest(suffix=suffix, cell=cell):
+                src = self.d / f"too-long.{suffix}"
+                _ = src.write_text(content, encoding="utf-8")
+                result = run(str(src), "-o", str(out), "--overwrite")
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(cell, result.stderr)
+                self.assertIn("32767", result.stderr)
+                self.assertEqual(out.read_bytes(), b"original destination")
+
+    def test_xlsx_export_preserves_text_at_the_length_limit(self) -> None:
+        value = "x" * 32_766 + "z"
+        src = self.d / "limit.csv"
+        _ = src.write_text(f"name\n{value}\n", encoding="utf-8")
+        xlsx = self.d / "limit.xlsx"
+        result = run(str(src), "-o", str(xlsx))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        back = self.d / "roundtrip.csv"
+        result = run(str(xlsx), "-o", str(back))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(back.read_text(encoding="utf-8"), f"name\n{value}\n")
+
     def test_markdown_keeps_pipes_and_line_breaks_inside_cells(self) -> None:
         src = self.d / "cells.csv"
         _ = src.write_bytes(
