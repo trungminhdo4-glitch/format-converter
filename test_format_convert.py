@@ -81,6 +81,67 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_xlsx_export_rejects_oversized_text_without_replacing_output(self) -> None:
+        oversized = "x" * 32_768
+        cases = (
+            ("csv", f"{oversized}\nvalue\n", "A1"),
+            ("json", json.dumps({"name": "example", "notes": oversized}), "B2"),
+        )
+        out = self.d / "existing.xlsx"
+        _ = out.write_bytes(b"original destination")
+        for suffix, content, cell in cases:
+            with self.subTest(suffix=suffix, cell=cell):
+                src = self.d / f"too-long.{suffix}"
+                _ = src.write_text(content, encoding="utf-8")
+                result = run(str(src), "-o", str(out), "--overwrite")
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(cell, result.stderr)
+                self.assertIn("32767", result.stderr)
+                self.assertEqual(out.read_bytes(), b"original destination")
+
+    def test_xlsx_export_preserves_text_at_the_length_limit(self) -> None:
+        value = "x" * 32_766 + "z"
+        src = self.d / "limit.csv"
+        _ = src.write_text(f"name\n{value}\n", encoding="utf-8")
+        xlsx = self.d / "limit.xlsx"
+        result = run(str(src), "-o", str(xlsx))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        back = self.d / "roundtrip.csv"
+        result = run(str(xlsx), "-o", str(back))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(back.read_text(encoding="utf-8"), f"name\n{value}\n")
+
+    def test_json_rejects_non_tabular_shapes_without_replacing_output(self):
+        cases = [42, None, "text", [1, 2], [{"a": 1}, "extra"],
+                 {"a": {"nested": 1}}, {"a": [1, 2]},
+                 {"a": float("nan")}, {"a": float("inf")}]
+        src = self.d / "invalid-table.json"
+        for data in cases:
+            for suffix in (".md", ".txt", ".xlsx"):
+                with self.subTest(data=data, suffix=suffix):
+                    src.write_text(json.dumps(data), encoding="utf-8")
+                    out = self.d / ("existing" + suffix)
+                    out.write_bytes(b"preserve this output")
+                    result = run(str(src), "-o", str(out), "--overwrite")
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("JSON", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(out.read_bytes(), b"preserve this output")
+                    self.assertEqual(set(self.d.iterdir()), {src, out})
+                    out.unlink()
+
+    def test_json_flat_records_preserve_values_and_column_order(self):
+        src = self.d / "records.json"
+        src.write_text('[{"b":true,"a":null},{"c":2.5,"b":false}]', encoding="utf-8")
+        self.assertEqual(
+            format_convert.read_table(src, ".json"),
+            (["b", "a", "c"], [[True, None, ""], [False, "", 2.5]]),
+        )
+        src.write_text('{"value":42}', encoding="utf-8")
+        self.assertEqual(format_convert.read_table(src, ".json"), (["value"], [[42]]))
+        src.write_text('[]', encoding="utf-8")
+        self.assertEqual(format_convert.read_table(src, ".json"), ([], []))
+
     def test_markdown_keeps_pipes_and_line_breaks_inside_cells(self) -> None:
         src = self.d / "cells.csv"
         _ = src.write_bytes(
@@ -508,6 +569,20 @@ class FormatConvertTests(unittest.TestCase):
         p = run(str(src), "-o", str(out))
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("| erst a; dann b |", out.read_text(encoding="utf-8"))
+
+    def test_invalid_json_preserves_existing_output(self) -> None:
+        source = self.d / "bad.json"
+        out = self.d / "result.md"
+        _ = out.write_text("original", encoding="utf-8")
+        for payload, diagnostic in ((b'{"key":', "Zeile 1, Spalte 8"), (b'"\xff"', "UTF-8")):
+            with self.subTest(diagnostic=diagnostic):
+                _ = source.write_bytes(payload)
+                result = run(str(source), "-o", str(out), "--overwrite")
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(source.name, result.stderr)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(out.read_text(encoding="utf-8"), "original")
 
 
 if __name__ == "__main__":

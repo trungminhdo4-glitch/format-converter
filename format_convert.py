@@ -22,6 +22,7 @@ import argparse
 import csv
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -62,6 +63,7 @@ REFUSED = {".exe", ".msi", ".bat", ".ps1", ".zip", ".7z", ".rar",
 
 
 XLSX_TITLE_REPLACEMENTS = str.maketrans(dict.fromkeys("[]:*?/\\", "_"))
+XLSX_MAX_CELL_TEXT_LENGTH = 32_767
 
 
 def fail(msg: str) -> NoReturn:
@@ -168,7 +170,7 @@ def worksheet_rows(path: Path, sheet: str | None):
         yield worksheet.iter_rows(values_only=True)
 
 
-def read_table(path, suffix, sheet=None):
+def read_table(path: Path, suffix, sheet=None):
     if suffix == ".csv":
         # Drop only the empty physical lines before the first record. Later
         # blank records and line breaks inside quoted fields are data.
@@ -176,15 +178,25 @@ def read_table(path, suffix, sheet=None):
         rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=csv_delimiter(text)))
         return rows[0] if rows else [], rows[1:]
     if suffix == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            fail(f"{path.name}: JSON-Eingabe muss UTF-8 sein")
+        except json.JSONDecodeError as exc:
+            fail(f"{path.name}: fehlerhaftes JSON (Zeile {exc.lineno}, Spalte {exc.colno})")
         items = data if isinstance(data, list) else [data]
         keys = []
-        for item in items:
-            if isinstance(item, dict):
-                for k in item:
-                    if k not in keys:
-                        keys.append(k)
-        return keys, [[r.get(k, "") if isinstance(r, dict) else r for k in keys] for r in items]
+        for row_number, item in enumerate(items, 1):
+            if not isinstance(item, dict):
+                fail(f"JSON: Datensatz {row_number} muss ein Objekt sein")
+            for key, value in item.items():
+                if isinstance(value, (dict, list)):
+                    fail(f"JSON: Datensatz {row_number} enthaelt einen verschachtelten Zellwert")
+                if isinstance(value, float) and not math.isfinite(value):
+                    fail(f"JSON: Datensatz {row_number} enthaelt eine nicht endliche Zahl")
+                if key not in keys:
+                    keys.append(key)
+        return keys, [[r.get(k, "") for k in keys] for r in items]
     if suffix == ".xlsx":
         with worksheet_rows(path, sheet) as source_rows:
             rows = [
@@ -376,14 +388,20 @@ def _write_conversion(inputs, tmp: Path, sheet):
             write_pdf_text(tmp, src.stem, read_text_input(src, suf))
     elif out_suf == ".xlsx":
         oxl = need("openpyxl")
+        from openpyxl.utils import get_column_letter
+
         header, rows = read_table(src, suf, sheet)
         wb = oxl.Workbook()
         ws = wb.active
         ws.title = src.stem.translate(XLSX_TITLE_REPLACEMENTS)[:31]
         for row_number, row in enumerate(chain(([str(h) for h in header],), rows), 1):
             for column, value in enumerate(row, 1):
+                is_text = isinstance(value, str)
+                if is_text and len(value) > XLSX_MAX_CELL_TEXT_LENGTH:
+                    coordinate = f"{get_column_letter(column)}{row_number}"
+                    fail(f"XLSX-Zelle {coordinate}: {len(value)} Zeichen (maximal {XLSX_MAX_CELL_TEXT_LENGTH})")
                 cell = ws.cell(row=row_number, column=column, value=value)
-                if isinstance(value, str):
+                if is_text:
                     cell.data_type = "s"
         wb.save(str(tmp))
     elif out_suf == ".docx":
