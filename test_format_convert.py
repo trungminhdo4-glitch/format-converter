@@ -539,6 +539,20 @@ class FormatConvertTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("| erst a; dann b |", out.read_text(encoding="utf-8"))
 
+    def test_invalid_json_preserves_existing_output(self) -> None:
+        source = self.d / "bad.json"
+        out = self.d / "result.md"
+        _ = out.write_text("original", encoding="utf-8")
+        for payload, diagnostic in ((b'{"key":', "Zeile 1, Spalte 8"), (b'"\xff"', "UTF-8")):
+            with self.subTest(diagnostic=diagnostic):
+                _ = source.write_bytes(payload)
+                result = run(str(source), "-o", str(out), "--overwrite")
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn(source.name, result.stderr)
+                self.assertIn(diagnostic, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+                self.assertEqual(out.read_text(encoding="utf-8"), "original")
+
 
 if __name__ == "__main__":
     unittest.main()
