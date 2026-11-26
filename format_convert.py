@@ -22,6 +22,7 @@ import argparse
 import csv
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -185,12 +186,17 @@ def read_table(path: Path, suffix, sheet=None):
             fail(f"{path.name}: fehlerhaftes JSON (Zeile {exc.lineno}, Spalte {exc.colno})")
         items = data if isinstance(data, list) else [data]
         keys = []
-        for item in items:
-            if isinstance(item, dict):
-                for k in item:
-                    if k not in keys:
-                        keys.append(k)
-        return keys, [[r.get(k, "") if isinstance(r, dict) else r for k in keys] for r in items]
+        for row_number, item in enumerate(items, 1):
+            if not isinstance(item, dict):
+                fail(f"JSON: Datensatz {row_number} muss ein Objekt sein")
+            for key, value in item.items():
+                if isinstance(value, (dict, list)):
+                    fail(f"JSON: Datensatz {row_number} enthaelt einen verschachtelten Zellwert")
+                if isinstance(value, float) and not math.isfinite(value):
+                    fail(f"JSON: Datensatz {row_number} enthaelt eine nicht endliche Zahl")
+                if key not in keys:
+                    keys.append(key)
+        return keys, [[r.get(k, "") for k in keys] for r in items]
     if suffix == ".xlsx":
         with worksheet_rows(path, sheet) as source_rows:
             rows = [
