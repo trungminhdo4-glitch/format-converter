@@ -30,6 +30,13 @@ exit code 2 — save as "CSV UTF-8". Cell values stay text (`12,50` is not conve
 In XLSX output, strings from CSV and JSON are stored as literal text, including
 values such as `=1+2` and `#N/A`. JSON numbers remain numeric.
 
+JSON input must be an object or an array of objects with flat cell values:
+strings, finite numbers, booleans, or `null`. For example,
+`[{"name":"Ada","hours":2.5},{"name":"Lin","active":true}]` creates columns
+in first-seen key order, leaving missing values blank. An empty array creates
+an empty table. Scalar records, nested objects/arrays, and non-finite numbers
+are refused with exit code 2 before the destination is replaced.
+
 `--list-sheets` prints a JSON array of worksheet names in workbook order.
 Pass a name to `--sheet` to select that worksheet. XLSX-to-CSV export writes
 rows as it reads them, so it can export large worksheets without holding all

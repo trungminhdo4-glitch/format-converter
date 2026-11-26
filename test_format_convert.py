@@ -81,6 +81,37 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_json_rejects_non_tabular_shapes_without_replacing_output(self):
+        cases = [42, None, "text", [1, 2], [{"a": 1}, "extra"],
+                 {"a": {"nested": 1}}, {"a": [1, 2]},
+                 {"a": float("nan")}, {"a": float("inf")}]
+        src = self.d / "invalid-table.json"
+        for data in cases:
+            for suffix in (".md", ".txt", ".xlsx"):
+                with self.subTest(data=data, suffix=suffix):
+                    src.write_text(json.dumps(data), encoding="utf-8")
+                    out = self.d / ("existing" + suffix)
+                    out.write_bytes(b"preserve this output")
+                    result = run(str(src), "-o", str(out), "--overwrite")
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn("JSON", result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(out.read_bytes(), b"preserve this output")
+                    self.assertEqual(set(self.d.iterdir()), {src, out})
+                    out.unlink()
+
+    def test_json_flat_records_preserve_values_and_column_order(self):
+        src = self.d / "records.json"
+        src.write_text('[{"b":true,"a":null},{"c":2.5,"b":false}]', encoding="utf-8")
+        self.assertEqual(
+            format_convert.read_table(src, ".json"),
+            (["b", "a", "c"], [[True, None, ""], [False, "", 2.5]]),
+        )
+        src.write_text('{"value":42}', encoding="utf-8")
+        self.assertEqual(format_convert.read_table(src, ".json"), (["value"], [[42]]))
+        src.write_text('[]', encoding="utf-8")
+        self.assertEqual(format_convert.read_table(src, ".json"), ([], []))
+
     def test_markdown_keeps_pipes_and_line_breaks_inside_cells(self) -> None:
         src = self.d / "cells.csv"
         _ = src.write_bytes(
