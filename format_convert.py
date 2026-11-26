@@ -7,7 +7,7 @@ Verwendung durch Agenten und Dashboard:
 
 Unterstuetzte Matrix (--list zeigt sie als JSON):
   .md/.txt/.html -> .pdf / .docx / .txt / .md
-  .csv/.json     -> .xlsx / .md / .txt
+  .csv/.json     -> .xlsx / .md / .txt (.json auch .csv)
   .xlsx          -> .csv / .md / .txt / .pdf
   .docx          -> .txt / .md / .pdf
   .png/.jpg/.jpeg-> .pdf (ein Bild pro Seite)
@@ -49,7 +49,7 @@ MATRIX = {
     ".html": [".pdf", ".docx", ".txt", ".md"],
     ".htm": [".pdf", ".docx", ".txt", ".md"],
     ".csv": [".xlsx", ".md", ".txt"],
-    ".json": [".xlsx", ".md", ".txt"],
+    ".json": [".xlsx", ".csv", ".md", ".txt"],
     ".xlsx": [".csv", ".md", ".txt", ".pdf"],
     ".docx": [".txt", ".md", ".pdf"],
     ".png": [".pdf"],
@@ -407,11 +407,14 @@ def _write_conversion(inputs, tmp: Path, sheet):
     elif out_suf == ".docx":
         write_docx(tmp, read_text_input(src, suf))
     elif out_suf == ".csv":
-        with (
-            worksheet_rows(src, sheet) as rows,
-            tmp.open("w", encoding="utf-8", newline="") as stream,
-        ):
-            csv.writer(stream).writerows(rows)
+        with tmp.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.writer(stream)
+            if suf == ".xlsx":
+                with worksheet_rows(src, sheet) as rows:
+                    writer.writerows(rows)
+            else:
+                header, rows = read_table(src, suf, sheet)
+                writer.writerows(chain([header] if header else [], rows))
     else:
         if suf in (".csv", ".json", ".xlsx"):
             header, rows = read_table(src, suf, sheet)

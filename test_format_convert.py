@@ -40,6 +40,7 @@ class FormatConvertTests(unittest.TestCase):
         m = json.loads(p.stdout)
         self.assertIn(".md", m["inputs"])
         self.assertIn(".pdf", m["inputs"][".md"])
+        self.assertIn(".csv", m["inputs"][".json"])
 
     def test_md_to_pdf(self):
         src = self.d / "a.md"
@@ -81,6 +82,38 @@ class FormatConvertTests(unittest.TestCase):
         out = self.d / "d.xlsx"
         self.assertEqual(run(str(src), "-o", str(out)).returncode, 0)
 
+    def test_json_to_csv_without_optional_libraries(self):
+        src = self.d / "records.json"
+        out = self.d / "records.csv"
+        data = [{"Name": "Müller, Ada", "Note": "line 1\nline 2", "Active": True},
+                {"Name": "Lin", "Hours": 2.5, "Note": None}]
+        src.write_text(json.dumps(data), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-S", str(CONV), str(src), "-o", str(out)],
+            text=True, encoding="utf-8", capture_output=True, timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with out.open(encoding="utf-8", newline="") as stream:
+            self.assertEqual(list(csv.reader(stream)), [
+                ["Name", "Note", "Active", "Hours"],
+                ["Müller, Ada", "line 1\nline 2", "True", ""],
+                ["Lin", "", "", "2.5"],
+            ])
+        refused = run(str(src), "-o", str(out))
+        self.assertEqual(refused.returncode, 2)
+
+    def test_json_to_csv_single_object_empty_array_and_long_text(self):
+        src = self.d / "record.json"
+        out = self.d / "record.csv"
+        value = "x" * 40_000
+        for data, expected in [({"value": value}, [["value"], [value]]), ([], [])]:
+            with self.subTest(empty=isinstance(data, list)):
+                src.write_text(json.dumps(data), encoding="utf-8")
+                result = run(str(src), "-o", str(out), "--overwrite")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                with out.open(encoding="utf-8", newline="") as stream:
+                    self.assertEqual(list(csv.reader(stream)), expected)
+
     def test_xlsx_export_rejects_oversized_text_without_replacing_output(self) -> None:
         oversized = "x" * 32_768
         cases = (
@@ -117,7 +150,7 @@ class FormatConvertTests(unittest.TestCase):
                  {"a": float("nan")}, {"a": float("inf")}]
         src = self.d / "invalid-table.json"
         for data in cases:
-            for suffix in (".md", ".txt", ".xlsx"):
+            for suffix in (".md", ".txt", ".xlsx", ".csv"):
                 with self.subTest(data=data, suffix=suffix):
                     src.write_text(json.dumps(data), encoding="utf-8")
                     out = self.d / ("existing" + suffix)
@@ -572,17 +605,18 @@ class FormatConvertTests(unittest.TestCase):
 
     def test_invalid_json_preserves_existing_output(self) -> None:
         source = self.d / "bad.json"
-        out = self.d / "result.md"
-        _ = out.write_text("original", encoding="utf-8")
-        for payload, diagnostic in ((b'{"key":', "Zeile 1, Spalte 8"), (b'"\xff"', "UTF-8")):
-            with self.subTest(diagnostic=diagnostic):
-                _ = source.write_bytes(payload)
-                result = run(str(source), "-o", str(out), "--overwrite")
-                self.assertEqual(result.returncode, 2, result.stderr)
-                self.assertIn(source.name, result.stderr)
-                self.assertIn(diagnostic, result.stderr)
-                self.assertNotIn("Traceback", result.stderr)
-                self.assertEqual(out.read_text(encoding="utf-8"), "original")
+        for suffix in (".md", ".txt", ".xlsx", ".csv"):
+            out = self.d / ("result" + suffix)
+            _ = out.write_bytes(b"original")
+            for payload, diagnostic in ((b'{"key":', "Zeile 1, Spalte 8"), (b'"\xff"', "UTF-8")):
+                with self.subTest(diagnostic=diagnostic, suffix=suffix):
+                    _ = source.write_bytes(payload)
+                    result = run(str(source), "-o", str(out), "--overwrite")
+                    self.assertEqual(result.returncode, 2, result.stderr)
+                    self.assertIn(source.name, result.stderr)
+                    self.assertIn(diagnostic, result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(out.read_bytes(), b"original")
 
 
 if __name__ == "__main__":
