@@ -16,7 +16,8 @@ python format_convert.py Mappe.xlsx -o Daten.csv --sheet "Daten 2026"
 |---|---|
 | `.md` / `.txt` | `.pdf`, `.docx`, `.txt`, `.md` |
 | `.html` / `.htm` | `.pdf`, `.docx`, `.txt`, `.md` (text extraction) |
-| `.csv` / `.json` | `.xlsx`, `.md`, `.txt` |
+| `.csv` | `.xlsx`, `.md`, `.txt` |
+| `.json` | `.csv`, `.xlsx`, `.md`, `.txt` |
 | `.xlsx` | `.csv`, `.md`, `.txt`, `.pdf` (`--sheet` selects a sheet, default: active) |
 | `.docx` | `.txt`, `.md`, `.pdf` (text + headings; complex layout is not preserved) |
 | `.png` / `.jpg` | `.pdf` (one image per page) |
@@ -38,6 +39,26 @@ strings, finite numbers, booleans, or `null`. For example,
 in first-seen key order, leaving missing values blank. An empty array creates
 an empty table. Scalar records, nested objects/arrays, and non-finite numbers
 are refused with exit code 2 before the destination is replaced.
+
+## JSON to CSV without Office dependencies
+
+Export flat JSON records for a spreadsheet or another data-processing tool:
+
+```bash
+python format_convert.py records.json -o records.csv
+```
+
+This route uses only Python's standard library. Output is UTF-8, comma-delimited
+CSV with a header in first-seen key order. Commas, quotes and embedded line breaks
+are quoted by the CSV writer. Missing fields and `null` become empty cells;
+booleans become `True`/`False` and numbers use Python's text representation.
+A single object produces one data row; an empty array produces an empty file.
+JSON input is loaded into memory; this route is not a streaming JSON parser.
+Use `--overwrite` to replace an existing output after validation succeeds.
+
+CSV exports preserve supplied text, including formula-like values. Spreadsheet
+applications may interpret those values as formulas when opening the file;
+prefer the literal-text XLSX export for untrusted spreadsheet-bound strings.
 
 `--list-sheets` prints a JSON array of worksheet names in workbook order.
 Pass a name to `--sheet` to select that worksheet. XLSX-to-CSV export writes
